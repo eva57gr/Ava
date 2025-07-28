@@ -1,5 +1,6 @@
 import React from 'react';
 import { CloseIcon } from './Icons';
+import Image from 'next/image';
 
 interface ChatHeaderProps {
   onClose: () => void;
@@ -10,7 +11,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({ onClose }) => {
     <div className="bg-gradient-to-r from-blue-600 to-blue-300 text-white p-3 rounded-t-xl flex items-center justify-between shadow-md">
       <div className="flex items-center space-x-3">
         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
-          <img
+          <Image
             src="/Ava.png"
             alt="Ava Avatar"
             className="w-full h-full object-cover"

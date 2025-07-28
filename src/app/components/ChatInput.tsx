@@ -8,7 +8,7 @@ interface ChatInputProps {
   isSending: boolean;
   isListening: boolean;
   onPrimaryAction: () => void;
-  primaryActionIcon: JSX.Element;
+  primaryActionIcon: React.ReactElement;
   primaryActionTitle: string;
 }
 

@@ -66,7 +66,7 @@ export default function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProp
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900">Reset Password</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Enter your email address and we'll send you a reset link
+            Enter your email address and we&apos;ll send you a reset link
           </p>
         </div>
 
@@ -179,7 +179,7 @@ export default function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProp
         </div>
 
         <div className="text-center">
-          <span className="text-sm text-gray-600">Don't have an account? </span>
+          <span className="text-sm text-gray-600">Don&apos;t have an account? </span>
           <button
             type="button"
             onClick={onSwitchToSignup}

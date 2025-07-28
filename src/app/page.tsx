@@ -737,8 +737,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
       }
 
       // Parse AI response for mistake detection (now for all features)
-      let aiMessage: Message;
-      aiMessage = parseAIResponse(aiResponseText, overrideInput);
+      const aiMessage: Message = parseAIResponse(aiResponseText, overrideInput);
 
       // Set waiting for retry if mistake detected (for all features now)
       if (aiMessage.hasMistake && aiMessage.mistakeId) {

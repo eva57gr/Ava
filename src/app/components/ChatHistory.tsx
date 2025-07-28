@@ -25,32 +25,33 @@ export default function ChatHistory({ onLoadSession }: ChatHistoryProps) {
   const supabase = createSupabaseClient()
 
   useEffect(() => {
-    if (user) {
-      fetchChatHistory()
-    }
-  }, [user])
+    if (!user) return
 
-  const fetchChatHistory = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(10)
+    const fetchChatHistory = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from('chat_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10)
 
-      if (error) {
-        console.error('Error fetching chat history:', error)
-        return
+        if (error) {
+          console.error('Error fetching chat history:', error)
+          return
+        }
+
+        setSessions(data || [])
+      } catch (error) {
+        console.error('Error:', error)
+      } finally {
+        setLoading(false)
       }
-
-      setSessions(data || [])
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
     }
-  }
+
+    fetchChatHistory()
+  }, [user, supabase])
 
   const handleLoadSession = (session: ChatSession) => {
     onLoadSession(session.messages)
