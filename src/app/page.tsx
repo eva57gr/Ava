@@ -3,15 +3,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ChatHeader from './components/ChatHeader';
 import FeatureButtons from './components/FeatureButtons';
-import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
-import AuthModal from './components/auth/AuthModal';
 import AuthPage from './components/auth/AuthPage';
 import UserProfile from './components/auth/UserProfile';
-import { LargeCloseIcon, ChatIcon, MicrophoneIcon, SendIcon } from './components/Icons';
+import { LargeCloseIcon, ChatIcon, MicrophoneIcon, SendIcon, DocumentUploadIcon } from './components/Icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { createSupabaseClient } from '@/lib/supabase';
-import { Content } from 'next/font/google';
+import { createSupabaseClient, supabase } from '@/lib/supabase';
+const Public_URL = process.env.NEXT_PUBLIC_API_URL!
 
 
 
@@ -77,6 +75,11 @@ interface Message {
   explanationRussian?: string; // Add Russian explanation field
   isRetryPrompt?: boolean;
   mistakeId?: string;
+  isGamePrompt?: boolean; // Add field for grammar games
+  gameId?: string; // Add field for game tracking
+  hasAttachment?: boolean;
+  attachmentName?: string;
+  attachmentType?: string;
 }
 
 type Feature = 'freeTalk' | 'vocabulary' | 'mistakes' | 'grammar';
@@ -92,6 +95,12 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [waitingForRetry, setWaitingForRetry] = useState<string | null>(null); // Store mistake ID waiting for retry
   const [showMistakeExplanation, setShowMistakeExplanation] = useState<string | null>(null);
+  // Add new state for grammar session management
+  const [grammarSessionStart, setGrammarSessionStart] = useState<Date | null>(null);
+  const [currentGrammarLesson, setCurrentGrammarLesson] = useState<string | null>(null);
+  const [practiceCount, setPracticeCount] = useState(0);
+  const [waitingForGameAnswer, setWaitingForGameAnswer] = useState<string | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const SpeechRecognition = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined;
@@ -485,24 +494,72 @@ Response: "MISTAKE_DETECTED: You meant: 'I need you to check my homework'. We ne
 Be thorough in your corrections and always explain the underlying rules.`;
 
       case 'grammar':
-        return `You are Ava, an English grammar tutor with mistake detection capabilities. Your role is to help users understand and correctly use English grammar.
+        return `You are Ava, an English grammar tutor with mistake detection capabilities. Your role is to help users understand and correctly use English grammar through structured lessons and interactive games.
 
 ${baseProtocol}
 
+LESSON DETECTION PROTOCOL:
+1. First, analyze the user's input to detect what grammar topic they're working on:
+   - Present Simple (I work, she works, do you work?)
+   - Past Simple (I worked, did you work?)
+   - Present Continuous (I am working, are you working?)
+   - Past Continuous (I was working, were you working?)
+   - Present Perfect (I have worked, have you worked?)
+   - Past Perfect (I had worked, had you worked?)
+   - Future tenses (will work, going to work)
+   - Modal verbs (can, should, must, might)
+   - Conditionals (if clauses)
+   - Passive voice
+   - Questions and negatives
+   - Articles (a, an, the)
+
+2. When you detect a grammar topic, start your first response with: "LESSON_DETECTED: [topic]"
+
+GRAMMAR SESSION STRUCTURE:
+1. **Initial Greeting** (when lesson detected):
+   "LESSON_DETECTED: Present Simple. Great! You're currently working on the Present Simple lesson. Let's practice it together!"
+
+2. **Practice Phase** (first 8-10 interactions):
+   - Apply normal mistake detection protocol
+   - Focus on the detected grammar topic
+   - Provide examples related to the lesson
+   - Encourage sentence creation using the target grammar
+
+3. **Game Phase** (after practice):
+   - When it's time for a game, respond with: "GRAMMAR_GAME:"
+   - Present 3 sentences, one with a mistake
+   - Ask user to identify the incorrect sentence
+   - Format: "GRAMMAR_GAME: Let's play a quick game! I'll say 3 sentences. One of them has a grammar mistake. Can you find it?
+     1. [correct sentence]
+     2. [incorrect sentence]  
+     3. [correct sentence]
+     
+     Which sentence has the mistake?"
+
 GRAMMAR-SPECIFIC GUIDELINES:
-- If NO_MISTAKE: Acknowledge their correct grammar, then answer their grammar question or explain the grammar in their sentence
-- Focus on grammar rules, tenses, sentence structure, and proper usage
-- When explaining grammar, provide clear rules and multiple examples
-- Help them understand the 'why' behind grammar rules
+- Always try to detect the grammar lesson from user input
+- If NO_MISTAKE during practice: Acknowledge correct grammar, provide more examples of the same topic
+- During games: If user finds the mistake, explain why it's wrong and provide the correction
+- Focus on one grammar topic per session for better learning
+- Provide plenty of examples and encourage active practice
 
 EXAMPLES:
-User: "When should I used past tense?"
-Response: "MISTAKE_DETECTED: You meant: 'When should I use past tense?' After modal verbs like 'should', we use the base form of the verb, not past tense. Can you try saying it again? RUSSIAN_EXPLANATION: После модальных глаголов типа 'should', 'can', 'will' мы всегда используем базовую форму глагола, а не прошедшее время. Правильно: 'should use', а не 'should used'."
 
-User: "When should I use past tense?"
-Response: "NO_MISTAKE: Great grammar question! You use past tense to describe actions that happened and finished in the past. For example: 'I walked to school yesterday' or 'She studied English last night'. There are different types: simple past (walked), past continuous (was walking), and past perfect (had walked). Which type would you like to learn about?"
+User: "I go to work every day"
+Response: "LESSON_DETECTED: Present Simple. Great! You're currently working on the Present Simple lesson. Let's practice it together! NO_MISTAKE: Perfect sentence! 'I go to work every day' uses Present Simple correctly for daily routines. Let's practice more. Can you tell me about another daily activity using Present Simple?"
 
-Always explain grammar rules clearly with examples and encourage practice.`;
+User: "She don't like coffee"
+Response: "MISTAKE_DETECTED: You meant: 'She doesn't like coffee'. With third person singular (he/she/it), we use 'doesn't' not 'don't'. Can you try saying it again? RUSSIAN_EXPLANATION: В третьем лице единственного числа (he/she/it) в Present Simple мы используем 'doesn't' для отрицания, а не 'don't'. 'Don't' используется с I/you/we/they."
+
+After several practice rounds:
+Response: "GRAMMAR_GAME: Let's play a quick game! I'll say 3 sentences. One of them has a grammar mistake. Can you find it?
+1. He works in a bank.
+2. She don't like pizza.
+3. They play football on weekends.
+
+Which sentence has the mistake?"
+
+Always maintain the lesson focus and progress from practice to games naturally.`;
 
       case 'freeTalk':
       default:
@@ -537,8 +594,47 @@ Be encouraging, natural, and focus on communication while gently correcting mist
 
   const parseAIResponse = (responseText: string, userInput: string) => {
     const mistakeId = Date.now().toString();
+    const gameId = Date.now().toString();
     
     console.log('Parsing AI response:', responseText); // Debug log
+    
+    // Handle lesson detection
+    if (responseText.startsWith('LESSON_DETECTED:')) {
+      const lessonMatch = responseText.match(/LESSON_DETECTED:\s*([^.]+)\./);
+      if (lessonMatch) {
+        const detectedLesson = lessonMatch[1].trim();
+        setCurrentGrammarLesson(detectedLesson);
+        setGrammarSessionStart(new Date());
+        setPracticeCount(0);
+        console.log('Detected grammar lesson:', detectedLesson);
+      }
+      
+      // Continue parsing the rest of the response
+      const remainingContent = responseText.replace(/LESSON_DETECTED:[^!]+!/, '').trim();
+      
+      if (remainingContent.startsWith('NO_MISTAKE:')) {
+        const content = remainingContent.replace('NO_MISTAKE:', '').trim();
+        return {
+          sender: 'ai' as const,
+          text: `Great! You're currently working on the ${currentGrammarLesson || 'grammar'} lesson. Let's practice it together! ${content}`,
+          hasMistake: false
+        };
+      }
+    }
+    
+    // Handle grammar games
+    if (responseText.startsWith('GRAMMAR_GAME:')) {
+      const gameContent = responseText.replace('GRAMMAR_GAME:', '').trim();
+      setWaitingForGameAnswer(gameId);
+      
+      return {
+        sender: 'ai' as const,
+        text: gameContent,
+        hasMistake: false,
+        isGamePrompt: true,
+        gameId: gameId
+      };
+    }
     
     if (responseText.startsWith('MISTAKE_DETECTED:')) {
       const content = responseText.replace('MISTAKE_DETECTED:', '').trim();
@@ -548,8 +644,8 @@ Be encouraging, natural, and focus on communication while gently correcting mist
       const englishPart = parts[0].trim();
       const russianPart = parts[1] ? parts[1].trim() : '';
       
-      console.log('English part:', englishPart); // Debug log
-      console.log('Russian part:', russianPart); // Debug log
+      // console.log('English part:', englishPart); // Debug log
+      // console.log('Russian part:', russianPart); // Debug log
       
       // Try to extract corrected text (look for text between quotes or single quotes)
       const correctedMatch = englishPart.match(/['"]([^'"]+)['"]/);
@@ -599,9 +695,13 @@ Be encouraging, natural, and focus on communication while gently correcting mist
       };
     } else if (responseText.startsWith('NO_MISTAKE:')) {
       const content = responseText.replace('NO_MISTAKE:', '').trim();
+      
+      // Remove any Russian explanation part for NO_MISTAKE responses
+      const englishOnlyContent = content.split('RUSSIAN_EXPLANATION:')[0].trim();
+      
       return {
         sender: 'ai' as const,
-        text: content,
+        text: englishOnlyContent,
         hasMistake: false
       };
     } else {
@@ -679,12 +779,36 @@ Be encouraging, natural, and focus on communication while gently correcting mist
 
         // Enhanced system instruction with conversation context
         const baseInstruction = getPromptPrefix(currentFeature);
+        
+        // Add grammar session context if in grammar mode
+        let grammarSessionContext = '';
+        if (currentFeature === 'grammar') {
+          const sessionDuration = grammarSessionStart ? 
+            Math.floor((Date.now() - grammarSessionStart.getTime()) / 1000 / 60) : 0;
+          
+          grammarSessionContext = `
+GRAMMAR SESSION STATUS:
+- Current lesson: ${currentGrammarLesson || 'Not detected yet'}
+- Practice interactions: ${practiceCount}
+- Session duration: ${sessionDuration} minutes
+- Waiting for game answer: ${waitingForGameAnswer ? 'Yes' : 'No'}
+
+SESSION MANAGEMENT:
+${practiceCount >= 8 && sessionDuration >= 8 ? 
+  '- TIME FOR GAME: Switch to grammar game mode with 3 sentences' : 
+  '- PRACTICE MODE: Continue practicing the current grammar topic'
+}
+${waitingForGameAnswer ? '- GAME ACTIVE: User should identify the incorrect sentence' : ''}`;
+        }
+        
         promptWithHistory = `${baseInstruction}
 
 CONVERSATION CONTEXT:
 This is an ongoing conversation. Here's the recent chat history:
 
 ${historyText}
+
+${grammarSessionContext}
 
 CONTINUATION GUIDELINES:
 - Reference previous topics and discussions naturally
@@ -710,27 +834,56 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
       if (!apiKey) throw new Error('API key is not configured.');
 
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-      
-      console.log('promptWithHistory---------------------------', promptWithHistory);
-      console.log('conversationContext---------------------------', conversationContext);
+      // const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+      // const response = await fetch(apiUrl, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ 
+      //     contents: conversationContext.length > 1 ? conversationContext : [{ role: 'user', parts: [{ text: overrideInput }] }],
+      //     systemInstruction: { parts: [{ text: promptWithHistory }] }
+      //   })
+      // });
+
+
+
+      const apiUrl = `${Public_URL}/chat`
+
+      console.log("---------->>>>>>>>>", overrideInput);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json' ,
+           "ngrok-skip-browser-warning": "true" // Bypass ngrok warning
+        },
         body: JSON.stringify({ 
-          contents: conversationContext.length > 1 ? conversationContext : [{ role: 'user', parts: [{ text: overrideInput }] }],
-          systemInstruction: { parts: [{ text: promptWithHistory }] }
+          question: overrideInput + promptWithHistory,
+          chat_history: chatHistory,
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+        const errorMessage = errorData.error?.message || 'Unknown error';
+        
+        // Handle specific error cases
+        if (response.status === 503 && errorMessage.includes('overloaded')) {
+          throw new Error('MODEL_OVERLOADED: The AI service is currently busy. Please try again in a few moments.');
+        } else if (response.status === 429) {
+          throw new Error('RATE_LIMIT: Too many requests. Please wait a moment before trying again.');
+        } else if (response.status >= 500) {
+          throw new Error('SERVER_ERROR: The AI service is experiencing technical difficulties. Please try again later.');
+        } else {
+          throw new Error(`API Error: ${response.status} - ${errorMessage}`);
+        }
       }
       
+      
       const result = await response.json();
-      const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      // const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      const aiResponseText= result.answer;
       
       if (!aiResponseText) {
         throw new Error('Could not get a valid response from the AI.');
@@ -742,6 +895,19 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
       // Set waiting for retry if mistake detected (for all features now)
       if (aiMessage.hasMistake && aiMessage.mistakeId) {
         setWaitingForRetry(aiMessage.mistakeId);
+      }
+      
+      // Handle grammar session management
+      if (currentFeature === 'grammar') {
+        // Increment practice count for non-game interactions
+        if (!aiMessage.isGamePrompt && !waitingForGameAnswer) {
+          setPracticeCount(prev => prev + 1);
+        }
+        
+        // Clear game answer state if user provided an answer
+        if (waitingForGameAnswer && !aiMessage.isGamePrompt) {
+          setWaitingForGameAnswer(null);
+        }
       } 
 
       // Save AI response to database
@@ -763,11 +929,30 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
 
     } catch (error: unknown) {
       console.error("Error during sendMessage:", error);
-      const errorMessage = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('MODEL_OVERLOADED:')) {
+          errorMessage = '🤖 AI сервис сейчас перегружен. Пожалуйста, попробуйте через несколько секунд.';
+        } else if (error.message.includes('RATE_LIMIT:')) {
+          errorMessage = '⏱️ Слишком много запросов. Подождите немного перед следующей попыткой.';
+        } else if (error.message.includes('SERVER_ERROR:')) {
+          errorMessage = '🔧 AI сервис испытывает технические трудности. Попробуйте позже.';
+        } else if (error.message.includes('API key is not configured')) {
+          errorMessage = '🔑 API ключ не настроен. Обратитесь к администратору.';
+        } else {
+          errorMessage = `Ошибка: ${error.message}`;
+        }
+      }
       
       setMessages(prev => [
         ...prev.filter(m => !m.isTyping), 
-        { sender: 'ai', text: errorMessage }
+        { 
+          sender: 'ai', 
+          text: errorMessage,
+          hasMistake: false // Mark as not a mistake to avoid retry prompts
+        }
       ]);
     } finally {
       setIsSending(false);
@@ -798,6 +983,14 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     loadChatHistory(feature);
     setInput('');
     if (isListening) recognitionRef.current?.stop();
+    
+    // Reset grammar session state when switching features
+    if (feature !== 'grammar') {
+      setGrammarSessionStart(null);
+      setCurrentGrammarLesson(null);
+      setPracticeCount(0);
+      setWaitingForGameAnswer(null);
+    }
   };
 
   const startListening = () => {
@@ -883,10 +1076,161 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
 
   if (!isOpen) return null;
 
+  // Upload file to Supabase storage
+  const uploadFileToStorage = async (file: File): Promise<string> => {
+    // Check if user is authenticated before proceeding
+    if (!user?.id) {
+      throw new Error('User not authenticated');
+    }
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .upload(fileName, file);
+    if (error) {
+      throw error;
+    }
+
+    const formData = new FormData();
+        formData.append('file', file);
+        // formData.append('user_id', user.id)
+    
+    const apiUrl = `${Public_URL}/upload-file`;
+
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        body: formData
+      });
+    console.log(response)
+      
+    return data.path;
+  };
+
+  // Handle file upload to storage
+    // Handle file upload to storage
+    const handleFileUpload = async (file: File) => {
+      setUploadingFile(true);
+      
+      // Add user message showing file upload info
+      const userMessage: Message = {
+        sender: 'user',
+        text: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        hasAttachment: false
+      };
+
+      await supabase.from('ChatHistory').insert([
+        {
+          user_id: user?.id,
+          content: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+          feature: currentFeature,
+          sender: "user",
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
+      setMessages(prev => [...prev, userMessage]);
+      
+      try {
+        // Check authentication first
+        if (!user?.id) {
+          throw new Error('Authentication required');
+        }
+        
+        // Upload file to Supabase storage
+        const filePath = await uploadFileToStorage(file);
+        
+        // Get the public URL for the uploaded file
+        const { data: publicUrlData } = supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath);
+        
+        // Add success message to chat
+        const successMessage: Message = {
+          sender: 'ai',
+          text: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
+          hasAttachment: false
+        };
+        
+        await supabase.from('ChatHistory').insert([
+          {
+            user_id: user?.id,
+            content: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
+            feature: currentFeature,
+            sender: "ai",
+            created_at: new Date().toISOString()
+          }
+        ]);
+
+        setMessages(prev => [...prev, successMessage]);
+      
+      // Save file reference to database for later retrieval
+      const { error: dbError } = await supabase.from('Document').insert([
+        {
+          user_id: user.id,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          public_url: publicUrlData.publicUrl,
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
+      if (dbError) {
+        console.error('Database error:', dbError);
+        // Don't throw error here, just log it since file was uploaded successfully
+      }
+      
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      let errorMessage = 'Sorry, I encountered an error while uploading your file. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Authentication required') || error.message.includes('User not authenticated')) {
+          errorMessage = 'Please sign in to upload files.';
+        } else if (error.message.includes('row-level security')) {
+          errorMessage = 'Upload permission denied. Please make sure you are properly authenticated.';
+        } else if (error.message.includes('file too large')) {
+          errorMessage = 'File is too large. Please try a smaller file.';
+        } else if (error.message.includes('invalid file type')) {
+          errorMessage = 'File type not supported. Please try a different file format.';
+        }
+      }
+      
+      setMessages(prev => [...prev, {
+        sender: 'ai',
+        text: errorMessage
+      }]);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   return (
     <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
       <ChatHeader onClose={onClose} />
       <FeatureButtons features={features} currentFeature={currentFeature} onFeatureClick={handleFeatureClick} />
+      
+      {/* Grammar lesson indicator */}
+      {currentFeature === 'grammar' && currentGrammarLesson && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+          <div className="text-xs text-blue-700 flex items-center justify-between">
+            <span>📖 Урок: <strong>{currentGrammarLesson}</strong></span>
+            <span>🎯 Практика: {practiceCount}/8</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Show uploading indicator */}
+      {uploadingFile && (
+        <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100">
+          <div className="text-xs text-yellow-700 flex items-center">
+            <div className="animate-spin rounded-full h-3 w-3 border-b border-yellow-600 mr-2"></div>
+            Processing file...
+          </div>
+        </div>
+      )}
       
       {/* Show loading state when loading history */}
       {isLoadingHistory ? (
@@ -900,7 +1244,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
             <div key={index} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+              <div className={`max-w-[80%] px-4 py-2 rounded-lg ${
                 message.sender === 'user' 
                   ? 'bg-blue-500 text-white' 
                   : message.isTyping 
@@ -918,6 +1262,14 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
                   </div>
                 ) : (
                   <div>
+                    {/* Show attachment indicator */}
+                    {message.hasAttachment && (
+                      <div className="mb-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center">
+                        <DocumentUploadIcon />
+                        <span className="ml-1">{message.attachmentName}</span>
+                      </div>
+                    )}
+                    
                     <div dangerouslySetInnerHTML={renderMarkdown(message.text)} />
                     
                     {/* Show mistake correction buttons for all features */}
@@ -936,6 +1288,20 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
                         )}
                       </div>
                     )}
+                    
+                    {/* Show grammar game indicator */}
+                    {message.isGamePrompt && message.gameId && (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-xs bg-green-100 text-green-700 px-3 py-2 rounded border border-green-200">
+                          🎮 Грамматическая игра - найдите предложение с ошибкой!
+                        </div>
+                        {waitingForGameAnswer === message.gameId && (
+                          <div className="text-xs text-blue-600 italic">
+                            🎯 Введите номер предложения с ошибкой (1, 2 или 3)
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -949,12 +1315,19 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
         input={input}
         onInputChange={(e) => setInput(e.target.value)}
         onKeyPress={handleKeyPress}
-        placeholder={waitingForRetry ? "Попробуйте сказать это снова..." : getInputPlaceholder(currentFeature)}
-        isSending={isSending}
+        placeholder={
+          uploadingFile ? "Processing file..." :
+          waitingForRetry ? "Попробуйте сказать это снова..." : 
+          waitingForGameAnswer ? "Введите номер предложения с ошибкой (1, 2 или 3)..." :
+          getInputPlaceholder(currentFeature)
+        }
+        isSending={isSending || uploadingFile}
         isListening={isListening}
         onPrimaryAction={getPrimaryButtonAction()}
         primaryActionIcon={getPrimaryButtonIcon()}
         primaryActionTitle={isListening ? 'Остановить Слушание' : (input.trim() !== '' ? 'Отправить Сообщение' : 'Начать Говорить')}
+        onFileUpload={handleFileUpload}
+        acceptedFileTypes=".txt,.pdf,.doc,.docx,.md,image/*"
       />
 
       {/* Mistake Explanation Modal */}

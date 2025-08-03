@@ -18,6 +18,17 @@ CREATE TABLE IF NOT EXISTS public.chat_sessions (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.Document (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL,
+  file_size BIGINT NOT NULL,
+  public_url TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+)
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(email);
 CREATE INDEX IF NOT EXISTS chat_sessions_user_id_idx ON public.chat_sessions(user_id);
@@ -26,6 +37,7 @@ CREATE INDEX IF NOT EXISTS chat_sessions_created_at_idx ON public.chat_sessions(
 -- Set up Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.Document ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for profiles table
 CREATE POLICY "Users can view own profile" ON public.profiles
@@ -67,3 +79,7 @@ CREATE TRIGGER handle_profiles_updated_at
 CREATE TRIGGER handle_chat_sessions_updated_at
   BEFORE UPDATE ON public.chat_sessions
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at(); 
+
+CREATE TRIGGER handle_Document_updated_at
+  BEFORE UPDATE ON public.Document
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
