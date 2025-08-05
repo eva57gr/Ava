@@ -8,10 +8,14 @@ import AuthPage from './components/auth/AuthPage';
 import UserProfile from './components/auth/UserProfile';
 import { LargeCloseIcon, ChatIcon, MicrophoneIcon, SendIcon, DocumentUploadIcon } from './components/Icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { createSupabaseClient, supabase } from '@/lib/supabase';
-const Public_URL = process.env.NEXT_PUBLIC_API_URL!
+import { createSupabaseClient } from '@/lib/supabase';
 
+// Fix: Properly handle environment variable with validation
+const Public_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+if (!Public_URL && typeof window === 'undefined') {
+  console.warn('NEXT_PUBLIC_API_URL environment variable is not set');
+}
 
 
 // Speech Recognition type definitions
@@ -106,13 +110,14 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   const SpeechRecognition = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined;
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
+  // Fix: Use single supabase instance
   const supabase = createSupabaseClient();
   const { user } = useAuth();
 
   // Load chat history from Supabase
   const loadChatHistory = async (feature: Feature) => {
     if (!user?.id) return;
-    
+
     setIsLoadingHistory(true);
     try {
       const { data: chatHistory, error } = await supabase
@@ -130,10 +135,10 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
       if (chatHistory && chatHistory.length > 0) {
         // Convert database records to Message format with mistake detection parsing
         const historyMessages: Message[] = [];
-        
+
         for (let i = 0; i < chatHistory.length; i++) {
           const record = chatHistory[i];
-          
+
           if (record.sender === 'user') {
             // User messages are straightforward
             historyMessages.push({
@@ -145,10 +150,10 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
             if (record.content.includes('MISTAKE_DETECTED:') || record.content.includes('NO_MISTAKE:')) {
               // Find the corresponding user message for context
               let userInput = '';
-              if (i > 0 && chatHistory[i-1].sender === 'user') {
-                userInput = chatHistory[i-1].content;
+              if (i > 0 && chatHistory[i - 1].sender === 'user') {
+                userInput = chatHistory[i - 1].content;
               }
-              
+
               // Parse the AI response to restore mistake detection functionality
               const parsedMessage = parseAIResponse(record.content, userInput);
               historyMessages.push(parsedMessage);
@@ -161,7 +166,7 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
             }
           }
         }
-        
+
         setMessages(historyMessages);
       } else {
         // Show greeting message if no history
@@ -595,9 +600,9 @@ Be encouraging, natural, and focus on communication while gently correcting mist
   const parseAIResponse = (responseText: string, userInput: string) => {
     const mistakeId = Date.now().toString();
     const gameId = Date.now().toString();
-    
+
     console.log('Parsing AI response:', responseText); // Debug log
-    
+
     // Handle lesson detection
     if (responseText.startsWith('LESSON_DETECTED:')) {
       const lessonMatch = responseText.match(/LESSON_DETECTED:\s*([^.]+)\./);
@@ -608,10 +613,10 @@ Be encouraging, natural, and focus on communication while gently correcting mist
         setPracticeCount(0);
         console.log('Detected grammar lesson:', detectedLesson);
       }
-      
+
       // Continue parsing the rest of the response
       const remainingContent = responseText.replace(/LESSON_DETECTED:[^!]+!/, '').trim();
-      
+
       if (remainingContent.startsWith('NO_MISTAKE:')) {
         const content = remainingContent.replace('NO_MISTAKE:', '').trim();
         return {
@@ -621,12 +626,12 @@ Be encouraging, natural, and focus on communication while gently correcting mist
         };
       }
     }
-    
+
     // Handle grammar games
     if (responseText.startsWith('GRAMMAR_GAME:')) {
       const gameContent = responseText.replace('GRAMMAR_GAME:', '').trim();
       setWaitingForGameAnswer(gameId);
-      
+
       return {
         sender: 'ai' as const,
         text: gameContent,
@@ -635,25 +640,25 @@ Be encouraging, natural, and focus on communication while gently correcting mist
         gameId: gameId
       };
     }
-    
+
     if (responseText.startsWith('MISTAKE_DETECTED:')) {
       const content = responseText.replace('MISTAKE_DETECTED:', '').trim();
-      
+
       // Split by RUSSIAN_EXPLANATION to get English and Russian parts
       const parts = content.split('RUSSIAN_EXPLANATION:');
       const englishPart = parts[0].trim();
       const russianPart = parts[1] ? parts[1].trim() : '';
-      
+
       // console.log('English part:', englishPart); // Debug log
       // console.log('Russian part:', russianPart); // Debug log
-      
+
       // Try to extract corrected text (look for text between quotes or single quotes)
       const correctedMatch = englishPart.match(/['"]([^'"]+)['"]/);
       const correctedText = correctedMatch ? correctedMatch[1] : '';
-      
+
       // Extract the brief explanation with more flexible matching
       let explanation = '';
-      
+
       // Try different patterns to extract explanation
       const patterns = [
         /\. (.+?)\. Can you try saying it again\?/,
@@ -661,7 +666,7 @@ Be encouraging, natural, and focus on communication while gently correcting mist
         /['"]([^'"]+)['"]\.?\s*(.+?)\.\s*Can you try saying it again\?/,
         /['"]([^'"]+)['"]\.?\s*(.+?)\.\s*RUSSIAN_EXPLANATION:/
       ];
-      
+
       for (const pattern of patterns) {
         const match = englishPart.match(pattern);
         if (match) {
@@ -669,7 +674,7 @@ Be encouraging, natural, and focus on communication while gently correcting mist
           break;
         }
       }
-      
+
       // If no explanation found with patterns, extract text between corrected quote and "Can you try"
       if (!explanation && correctedText) {
         const afterCorrection = englishPart.split(`"${correctedText}"`)[1] || englishPart.split(`'${correctedText}'`)[1];
@@ -678,10 +683,10 @@ Be encouraging, natural, and focus on communication while gently correcting mist
           explanation = explanationMatch ? explanationMatch[1].trim() : '';
         }
       }
-      
+
       console.log('Extracted explanation:', explanation); // Debug log
       console.log('Extracted corrected text:', correctedText); // Debug log
-      
+
       return {
         sender: 'ai' as const,
         text: englishPart,
@@ -695,10 +700,10 @@ Be encouraging, natural, and focus on communication while gently correcting mist
       };
     } else if (responseText.startsWith('NO_MISTAKE:')) {
       const content = responseText.replace('NO_MISTAKE:', '').trim();
-      
+
       // Remove any Russian explanation part for NO_MISTAKE responses
       const englishOnlyContent = content.split('RUSSIAN_EXPLANATION:')[0].trim();
-      
+
       return {
         sender: 'ai' as const,
         text: englishOnlyContent,
@@ -716,10 +721,10 @@ Be encouraging, natural, and focus on communication while gently correcting mist
 
   const sendMessage = async (overrideInput: string = input, autoSpeak = false, isRetryAttempt = false) => {
     if (overrideInput.trim() === '') return;
-    
+
     const userMessage: Message = { sender: 'user', text: overrideInput };
     setMessages(prev => [...prev, userMessage]);
-    
+
     if (!autoSpeak) {
       setInput('');
     }
@@ -754,7 +759,7 @@ Be encouraging, natural, and focus on communication while gently correcting mist
         .select('*')
         .eq('user_id', user?.id)
         .eq('feature', currentFeature)
-        .order('created_at', { ascending: true}); // Get all history in chronological order
+        .order('created_at', { ascending: true });
 
       if (historyError) {
         console.error('Error fetching chat history:', historyError);
@@ -763,7 +768,7 @@ Be encouraging, natural, and focus on communication while gently correcting mist
       // Create comprehensive prompt using chat history
       let promptWithHistory = '';
       let conversationContext = [];
-      
+
       if (chatHistory && chatHistory.length > 0) {
         // Build conversation context for API
         conversationContext = chatHistory.map(msg => ({
@@ -779,13 +784,13 @@ Be encouraging, natural, and focus on communication while gently correcting mist
 
         // Enhanced system instruction with conversation context
         const baseInstruction = getPromptPrefix(currentFeature);
-        
+
         // Add grammar session context if in grammar mode
         let grammarSessionContext = '';
         if (currentFeature === 'grammar') {
-          const sessionDuration = grammarSessionStart ? 
+          const sessionDuration = grammarSessionStart ?
             Math.floor((Date.now() - grammarSessionStart.getTime()) / 1000 / 60) : 0;
-          
+
           grammarSessionContext = `
 GRAMMAR SESSION STATUS:
 - Current lesson: ${currentGrammarLesson || 'Not detected yet'}
@@ -794,13 +799,13 @@ GRAMMAR SESSION STATUS:
 - Waiting for game answer: ${waitingForGameAnswer ? 'Yes' : 'No'}
 
 SESSION MANAGEMENT:
-${practiceCount >= 8 && sessionDuration >= 8 ? 
-  '- TIME FOR GAME: Switch to grammar game mode with 3 sentences' : 
-  '- PRACTICE MODE: Continue practicing the current grammar topic'
-}
+${practiceCount >= 8 && sessionDuration >= 8 ?
+              '- TIME FOR GAME: Switch to grammar game mode with 3 sentences' :
+              '- PRACTICE MODE: Continue practicing the current grammar topic'
+            }
 ${waitingForGameAnswer ? '- GAME ACTIVE: User should identify the incorrect sentence' : ''}`;
         }
-        
+
         promptWithHistory = `${baseInstruction}
 
 CONVERSATION CONTEXT:
@@ -829,35 +834,23 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
         promptWithHistory = getPromptPrefix(currentFeature);
         conversationContext = [{ role: 'user', parts: [{ text: overrideInput }] }];
       }
-      
-      // Make API call to Gemini with enhanced context
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API key is not configured.');
 
-      // const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+      // Fix: Add validation for API URL before making request
+      if (!Public_URL) {
+        throw new Error('API URL is not configured. Please check your environment variables.');
+      }
 
-      // const response = await fetch(apiUrl, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ 
-      //     contents: conversationContext.length > 1 ? conversationContext : [{ role: 'user', parts: [{ text: overrideInput }] }],
-      //     systemInstruction: { parts: [{ text: promptWithHistory }] }
-      //   })
-      // });
-
-
-
-      const apiUrl = `${Public_URL}/chat`
-
-      console.log("---------->>>>>>>>>", overrideInput);
+      const apiUrl = `${Public_URL}/chat`;
+      console.log("API URL:", apiUrl);
+      console.log("User input:", overrideInput);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json' ,
-           "ngrok-skip-browser-warning": "true" // Bypass ngrok warning
+          'Content-Type': 'application/json',
+          "ngrok-skip-browser-warning": "true"
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           question: overrideInput + promptWithHistory,
           chat_history: chatHistory,
         })
@@ -866,7 +859,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
       if (!response.ok) {
         const errorData = await response.json();
         const errorMessage = errorData.error?.message || 'Unknown error';
-        
+
         // Handle specific error cases
         if (response.status === 503 && errorMessage.includes('overloaded')) {
           throw new Error('MODEL_OVERLOADED: The AI service is currently busy. Please try again in a few moments.');
@@ -878,37 +871,32 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           throw new Error(`API Error: ${response.status} - ${errorMessage}`);
         }
       }
-      
-      
-      const result = await response.json();
 
-      // const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      const aiResponseText= result.answer;
-      
+      const result = await response.json();
+      const aiResponseText = result.answer;
+
       if (!aiResponseText) {
         throw new Error('Could not get a valid response from the AI.');
       }
 
-      // Parse AI response for mistake detection (now for all features)
+      // Parse AI response for mistake detection
       const aiMessage: Message = parseAIResponse(aiResponseText, overrideInput);
 
-      // Set waiting for retry if mistake detected (for all features now)
+      // Set waiting for retry if mistake detected
       if (aiMessage.hasMistake && aiMessage.mistakeId) {
         setWaitingForRetry(aiMessage.mistakeId);
       }
-      
+
       // Handle grammar session management
       if (currentFeature === 'grammar') {
-        // Increment practice count for non-game interactions
         if (!aiMessage.isGamePrompt && !waitingForGameAnswer) {
           setPracticeCount(prev => prev + 1);
         }
-        
-        // Clear game answer state if user provided an answer
+
         if (waitingForGameAnswer && !aiMessage.isGamePrompt) {
           setWaitingForGameAnswer(null);
         }
-      } 
+      }
 
       // Save AI response to database
       await supabase.from('ChatHistory').insert([
@@ -923,35 +911,35 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
 
       // Display AI response
       setMessages(prev => [
-        ...prev.filter(m => !m.isTyping), 
+        ...prev.filter(m => !m.isTyping),
         aiMessage
       ]);
 
     } catch (error: unknown) {
       console.error("Error during sendMessage:", error);
-      
+
       let errorMessage = 'An unexpected error occurred. Please try again.';
-      
+
       if (error instanceof Error) {
-        if (error.message.includes('MODEL_OVERLOADED:')) {
+        if (error.message.includes('API URL is not configured')) {
+          errorMessage = '🔧 API URL не настроен. Проверьте переменные окружения.';
+        } else if (error.message.includes('MODEL_OVERLOADED:')) {
           errorMessage = '🤖 AI сервис сейчас перегружен. Пожалуйста, попробуйте через несколько секунд.';
         } else if (error.message.includes('RATE_LIMIT:')) {
           errorMessage = '⏱️ Слишком много запросов. Подождите немного перед следующей попыткой.';
         } else if (error.message.includes('SERVER_ERROR:')) {
           errorMessage = '🔧 AI сервис испытывает технические трудности. Попробуйте позже.';
-        } else if (error.message.includes('API key is not configured')) {
-          errorMessage = '🔑 API ключ не настроен. Обратитесь к администратору.';
         } else {
           errorMessage = `Ошибка: ${error.message}`;
         }
       }
-      
+
       setMessages(prev => [
-        ...prev.filter(m => !m.isTyping), 
-        { 
-          sender: 'ai', 
+        ...prev.filter(m => !m.isTyping),
+        {
+          sender: 'ai',
           text: errorMessage,
-          hasMistake: false // Mark as not a mistake to avoid retry prompts
+          hasMistake: false
         }
       ]);
     } finally {
@@ -983,7 +971,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     loadChatHistory(feature);
     setInput('');
     if (isListening) recognitionRef.current?.stop();
-    
+
     // Reset grammar session state when switching features
     if (feature !== 'grammar') {
       setGrammarSessionStart(null);
@@ -1035,11 +1023,89 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
       console.log('Speech recognition already active');
     }
   };
-  
-  const speakText = (text: string) => {
+
+  // Helper function to get voices with retry mechanism
+  const getVoicesWithRetry = (): Promise<SpeechSynthesisVoice[]> => {
+    return new Promise((resolve) => {
+      let voices = window.speechSynthesis.getVoices();
+
+      if (voices.length > 0) {
+        resolve(voices);
+        return;
+      }
+
+      // If no voices available, wait for them to load
+      const onVoicesChanged = () => {
+        voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+          resolve(voices);
+        }
+      };
+
+      window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+
+      // Fallback timeout in case voices never load
+      setTimeout(() => {
+        window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+        resolve(window.speechSynthesis.getVoices());
+      }, 1000);
+    });
+  };
+
+  const speakText = async (text: string) => {
     try {
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        // Get available voices with retry mechanism
+        const voices = await getVoicesWithRetry();
+
+        // Find the best female English voice
+        const femaleVoice = voices.find(voice =>
+          voice.lang.startsWith('en') &&
+          (voice.name.toLowerCase().includes('female') ||
+            voice.name.toLowerCase().includes('woman') ||
+            voice.name.toLowerCase().includes('samantha') ||
+            voice.name.toLowerCase().includes('karen') ||
+            voice.name.toLowerCase().includes('susan') ||
+            voice.name.toLowerCase().includes('victoria') ||
+            voice.name.toLowerCase().includes('zira') ||
+            voice.name.toLowerCase().includes('hazel') ||
+            voice.name.toLowerCase().includes('serena') ||
+            voice.name.toLowerCase().includes('allison') ||
+            voice.name.toLowerCase().includes('ava') ||
+            voice.name.toLowerCase().includes('elena') ||
+            voice.name.toLowerCase().includes('nicky') ||
+            voice.name.toLowerCase().includes('tessa'))
+        );
+
+        // Configure voice settings
+        if (femaleVoice) {
+          utterance.voice = femaleVoice;
+          console.log('Using female voice:', femaleVoice.name, femaleVoice.lang);
+        } else {
+          // Fallback: try to find any English voice that sounds female
+          const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
+          if (englishVoices.length > 0) {
+            // Often the second or third voice in the list is female
+            utterance.voice = englishVoices[Math.min(1, englishVoices.length - 1)];
+            console.log('Using fallback voice:', utterance.voice?.name);
+          }
+          console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+        }
+
+        // Configure speech parameters for more natural female sound
+        utterance.rate = 0.85;     // Slightly slower for clarity (0.1 to 10)
+        utterance.pitch = 1.1;     // Slightly higher pitch for female voice (0 to 2)
+        utterance.volume = 0.8;    // Volume level (0 to 1)
+
+        // Add event listeners for debugging
+        utterance.onstart = () => console.log('TTS started with voice:', utterance.voice?.name);
+        utterance.onend = () => console.log('TTS ended');
+        utterance.onerror = (event) => console.error('TTS error:', event);
+
+        window.speechSynthesis.speak(utterance);
       }
     } catch (error) {
       console.error("Error in speakText:", error);
@@ -1082,7 +1148,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     if (!user?.id) {
       throw new Error('User not authenticated');
     }
-    
+
     const fileExt = file.name.split('.').pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
@@ -1094,77 +1160,77 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     }
 
     const formData = new FormData();
-        formData.append('file', file);
-        // formData.append('user_id', user.id)
-    
+    formData.append('file', file);
+    // formData.append('user_id', user.id)
+
     const apiUrl = `${Public_URL}/upload-file`;
 
     const response = await fetch(apiUrl, {
-        method: 'POST',
-        body: formData
-      });
+      method: 'POST',
+      body: formData
+    });
     console.log(response)
-      
+
     return data.path;
   };
 
   // Handle file upload to storage
-    // Handle file upload to storage
-    const handleFileUpload = async (file: File) => {
-      setUploadingFile(true);
-      
-      // Add user message showing file upload info
-      const userMessage: Message = {
-        sender: 'user',
-        text: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+  // Handle file upload to storage
+  const handleFileUpload = async (file: File) => {
+    setUploadingFile(true);
+
+    // Add user message showing file upload info
+    const userMessage: Message = {
+      sender: 'user',
+      text: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+      hasAttachment: false
+    };
+
+    await supabase.from('ChatHistory').insert([
+      {
+        user_id: user?.id,
+        content: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        feature: currentFeature,
+        sender: "user",
+        created_at: new Date().toISOString()
+      }
+    ]);
+
+    setMessages(prev => [...prev, userMessage]);
+
+    try {
+      // Check authentication first
+      if (!user?.id) {
+        throw new Error('Authentication required');
+      }
+
+      // Upload file to Supabase storage
+      const filePath = await uploadFileToStorage(file);
+
+      // Get the public URL for the uploaded file
+      const { data: publicUrlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+      // Add success message to chat
+      const successMessage: Message = {
+        sender: 'ai',
+        text: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
         hasAttachment: false
       };
 
       await supabase.from('ChatHistory').insert([
         {
           user_id: user?.id,
-          content: `Uploaded file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+          content: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
           feature: currentFeature,
-          sender: "user",
+          sender: "ai",
           created_at: new Date().toISOString()
         }
       ]);
-      
-      setMessages(prev => [...prev, userMessage]);
-      
-      try {
-        // Check authentication first
-        if (!user?.id) {
-          throw new Error('Authentication required');
-        }
-        
-        // Upload file to Supabase storage
-        const filePath = await uploadFileToStorage(file);
-        
-        // Get the public URL for the uploaded file
-        const { data: publicUrlData } = supabase.storage
-          .from('documents')
-          .getPublicUrl(filePath);
-        
-        // Add success message to chat
-        const successMessage: Message = {
-          sender: 'ai',
-          text: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
-          hasAttachment: false
-        };
-        
-        await supabase.from('ChatHistory').insert([
-          {
-            user_id: user?.id,
-            content: `✅ File "${file.name}" has been successfully uploaded to your documents! You can access it anytime from your storage.`,
-            feature: currentFeature,
-            sender: "ai",
-            created_at: new Date().toISOString()
-          }
-        ]);
 
-        setMessages(prev => [...prev, successMessage]);
-      
+      setMessages(prev => [...prev, successMessage]);
+
       // Save file reference to database for later retrieval
       const { error: dbError } = await supabase.from('Document').insert([
         {
@@ -1176,16 +1242,16 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           created_at: new Date().toISOString()
         }
       ]);
-      
+
       if (dbError) {
         console.error('Database error:', dbError);
         // Don't throw error here, just log it since file was uploaded successfully
       }
-      
+
     } catch (error) {
       console.error('Error uploading file:', error);
       let errorMessage = 'Sorry, I encountered an error while uploading your file. Please try again.';
-      
+
       if (error instanceof Error) {
         if (error.message.includes('Authentication required') || error.message.includes('User not authenticated')) {
           errorMessage = 'Please sign in to upload files.';
@@ -1197,7 +1263,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           errorMessage = 'File type not supported. Please try a different file format.';
         }
       }
-      
+
       setMessages(prev => [...prev, {
         sender: 'ai',
         text: errorMessage
@@ -1211,7 +1277,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
       <ChatHeader onClose={onClose} />
       <FeatureButtons features={features} currentFeature={currentFeature} onFeatureClick={handleFeatureClick} />
-      
+
       {/* Grammar lesson indicator */}
       {currentFeature === 'grammar' && currentGrammarLesson && (
         <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
@@ -1221,7 +1287,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           </div>
         </div>
       )}
-      
+
       {/* Show uploading indicator */}
       {uploadingFile && (
         <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100">
@@ -1231,7 +1297,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           </div>
         </div>
       )}
-      
+
       {/* Show loading state when loading history */}
       {isLoadingHistory ? (
         <div className="flex-1 flex items-center justify-center">
@@ -1244,19 +1310,18 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
             <div key={index} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] px-4 py-2 rounded-lg ${
-                message.sender === 'user' 
-                  ? 'bg-blue-500 text-white' 
-                  : message.isTyping 
-                    ? 'bg-gray-100 text-gray-600' 
+              <div className={`max-w-[80%] px-4 py-2 rounded-lg ${message.sender === 'user'
+                  ? 'bg-blue-500 text-white'
+                  : message.isTyping
+                    ? 'bg-gray-100 text-gray-600'
                     : 'bg-gray-100 text-gray-800'
-              }`}>
+                }`}>
                 {message.isTyping ? (
                   <div className="flex items-center space-x-1">
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                     </div>
                     <span className="text-sm">{message.text}</span>
                   </div>
@@ -1269,9 +1334,9 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
                         <span className="ml-1">{message.attachmentName}</span>
                       </div>
                     )}
-                    
+
                     <div dangerouslySetInnerHTML={renderMarkdown(message.text)} />
-                    
+
                     {/* Show mistake correction buttons for all features */}
                     {message.hasMistake && message.mistakeId && (
                       <div className="mt-3 space-y-2">
@@ -1288,7 +1353,7 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
                         )}
                       </div>
                     )}
-                    
+
                     {/* Show grammar game indicator */}
                     {message.isGamePrompt && message.gameId && (
                       <div className="mt-3 space-y-2">
@@ -1310,16 +1375,16 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           <div ref={messagesEndRef} />
         </div>
       )}
-      
+
       <ChatInput
         input={input}
         onInputChange={(e) => setInput(e.target.value)}
         onKeyPress={handleKeyPress}
         placeholder={
           uploadingFile ? "Processing file..." :
-          waitingForRetry ? "Попробуйте сказать это снова..." : 
-          waitingForGameAnswer ? "Введите номер предложения с ошибкой (1, 2 или 3)..." :
-          getInputPlaceholder(currentFeature)
+            waitingForRetry ? "Попробуйте сказать это снова..." :
+              waitingForGameAnswer ? "Введите номер предложения с ошибкой (1, 2 или 3)..." :
+                getInputPlaceholder(currentFeature)
         }
         isSending={isSending || uploadingFile}
         isListening={isListening}
