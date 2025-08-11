@@ -6,12 +6,14 @@ import FeatureButtons from './components/FeatureButtons';
 import ChatInput from './components/ChatInput';
 import AuthPage from './components/auth/AuthPage';
 import UserProfile from './components/auth/UserProfile';
+import VoiceSettingsModal from './components/VoiceSettingsModal';
 import { LargeCloseIcon, ChatIcon, MicrophoneIcon, SendIcon, DocumentUploadIcon } from './components/Icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { createSupabaseClient } from '@/lib/supabase';
 
 // Fix: Properly handle environment variable with validation
 const Public_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const GOOGLE_TTS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_TTS_API_KEY || '';
 
 if (!Public_URL && typeof window === 'undefined') {
   console.warn('NEXT_PUBLIC_API_URL environment variable is not set');
@@ -105,6 +107,15 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   const [practiceCount, setPracticeCount] = useState(0);
   const [waitingForGameAnswer, setWaitingForGameAnswer] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState('en-US-Journey-F'); // Default voice
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState({
+    selectedVoice: 'en-US-Journey-F',
+    speed: 0.9,
+    pitch: 0.0,
+    language: 'en-US',
+    audioProfile: 'default'
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const SpeechRecognition = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined;
@@ -113,6 +124,94 @@ const AIChatWidget = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   // Fix: Use single supabase instance
   const supabase = createSupabaseClient();
   const { user } = useAuth();
+
+  // Define available Google Cloud TTS voices
+  const voiceOptions = [
+    // US English voices
+    { id: 'en-US-Journey-F', name: 'en-US-Journey-F', gender: 'FEMALE', description: 'Warm, conversational' },
+    { id: 'en-US-Studio-O', name: 'en-US-Studio-O', gender: 'FEMALE', description: 'Clear, professional' },
+    { id: 'en-US-Neural2-F', name: 'en-US-Neural2-F', gender: 'FEMALE', description: 'Natural, expressive' },
+    { id: 'en-US-Neural2-A', name: 'en-US-Neural2-A', gender: 'FEMALE', description: 'Friendly, casual' },
+    { id: 'en-US-Neural2-C', name: 'en-US-Neural2-C', gender: 'FEMALE', description: 'Energetic, youthful' },
+    { id: 'en-US-Journey-D', name: 'en-US-Journey-D', gender: 'MALE', description: 'Deep, authoritative' },
+    { id: 'en-US-Neural2-D', name: 'en-US-Neural2-D', gender: 'MALE', description: 'Calm, steady' },
+    { id: 'en-US-Standard-B', name: 'en-US-Standard-B', gender: 'MALE', description: 'Classic, clear' },
+    { id: 'en-US-Standard-C', name: 'en-US-Standard-C', gender: 'FEMALE', description: 'Standard female' },
+    { id: 'en-US-Standard-D', name: 'en-US-Standard-D', gender: 'MALE', description: 'Standard male' },
+    { id: 'en-US-Standard-E', name: 'en-US-Standard-E', gender: 'FEMALE', description: 'Clear female' },
+    { id: 'en-US-Wavenet-A', name: 'en-US-Wavenet-A', gender: 'MALE', description: 'Wavenet male' },
+    { id: 'en-US-Wavenet-B', name: 'en-US-Wavenet-B', gender: 'MALE', description: 'Wavenet alternative' },
+    { id: 'en-US-Wavenet-C', name: 'en-US-Wavenet-C', gender: 'FEMALE', description: 'Wavenet female' },
+    { id: 'en-US-Wavenet-D', name: 'en-US-Wavenet-D', gender: 'MALE', description: 'Wavenet deep' },
+    { id: 'en-US-Wavenet-E', name: 'en-US-Wavenet-E', gender: 'FEMALE', description: 'Wavenet expressive' },
+    { id: 'en-US-Wavenet-F', name: 'en-US-Wavenet-F', gender: 'FEMALE', description: 'Wavenet friendly' },
+    { id: 'en-US-Wavenet-G', name: 'en-US-Wavenet-G', gender: 'FEMALE', description: 'Wavenet gentle' },
+    { id: 'en-US-Wavenet-H', name: 'en-US-Wavenet-H', gender: 'FEMALE', description: 'Wavenet warm' },
+    { id: 'en-US-Wavenet-I', name: 'en-US-Wavenet-I', gender: 'MALE', description: 'Wavenet mature' },
+    { id: 'en-US-Wavenet-J', name: 'en-US-Wavenet-J', gender: 'MALE', description: 'Wavenet professional' },
+    
+    // UK English voices
+    { id: 'en-GB-Neural2-A', name: 'en-GB-Neural2-A', gender: 'FEMALE', description: 'British female' },
+    { id: 'en-GB-Neural2-B', name: 'en-GB-Neural2-B', gender: 'MALE', description: 'British male' },
+    { id: 'en-GB-Neural2-C', name: 'en-GB-Neural2-C', gender: 'FEMALE', description: 'British expressive' },
+    { id: 'en-GB-Neural2-D', name: 'en-GB-Neural2-D', gender: 'MALE', description: 'British deep' },
+    { id: 'en-GB-Standard-A', name: 'en-GB-Standard-A', gender: 'FEMALE', description: 'British standard female' },
+    { id: 'en-GB-Standard-B', name: 'en-GB-Standard-B', gender: 'MALE', description: 'British standard male' },
+    { id: 'en-GB-Standard-C', name: 'en-GB-Standard-C', gender: 'FEMALE', description: 'British clear' },
+    { id: 'en-GB-Standard-D', name: 'en-GB-Standard-D', gender: 'MALE', description: 'British authoritative' },
+    { id: 'en-GB-Wavenet-A', name: 'en-GB-Wavenet-A', gender: 'FEMALE', description: 'British wavenet female' },
+    { id: 'en-GB-Wavenet-B', name: 'en-GB-Wavenet-B', gender: 'MALE', description: 'British wavenet male' },
+    { id: 'en-GB-Wavenet-C', name: 'en-GB-Wavenet-C', gender: 'FEMALE', description: 'British wavenet expressive' },
+    { id: 'en-GB-Wavenet-D', name: 'en-GB-Wavenet-D', gender: 'MALE', description: 'British wavenet deep' },
+    
+    // Australian English voices
+    { id: 'en-AU-Neural2-A', name: 'en-AU-Neural2-A', gender: 'FEMALE', description: 'Australian female' },
+    { id: 'en-AU-Neural2-B', name: 'en-AU-Neural2-B', gender: 'MALE', description: 'Australian male' },
+    { id: 'en-AU-Neural2-C', name: 'en-AU-Neural2-C', gender: 'FEMALE', description: 'Australian friendly' },
+    { id: 'en-AU-Neural2-D', name: 'en-AU-Neural2-D', gender: 'MALE', description: 'Australian casual' },
+    { id: 'en-AU-Standard-A', name: 'en-AU-Standard-A', gender: 'FEMALE', description: 'Australian standard female' },
+    { id: 'en-AU-Standard-B', name: 'en-AU-Standard-B', gender: 'MALE', description: 'Australian standard male' },
+    { id: 'en-AU-Standard-C', name: 'en-AU-Standard-C', gender: 'FEMALE', description: 'Australian clear' },
+    { id: 'en-AU-Standard-D', name: 'en-AU-Standard-D', gender: 'MALE', description: 'Australian strong' },
+    { id: 'en-AU-Wavenet-A', name: 'en-AU-Wavenet-A', gender: 'FEMALE', description: 'Australian wavenet female' },
+    { id: 'en-AU-Wavenet-B', name: 'en-AU-Wavenet-B', gender: 'MALE', description: 'Australian wavenet male' },
+    { id: 'en-AU-Wavenet-C', name: 'en-AU-Wavenet-C', gender: 'FEMALE', description: 'Australian wavenet friendly' },
+    { id: 'en-AU-Wavenet-D', name: 'en-AU-Wavenet-D', gender: 'MALE', description: 'Australian wavenet deep' },
+    
+    // Canadian English voices
+    { id: 'en-CA-Neural2-A', name: 'en-CA-Neural2-A', gender: 'FEMALE', description: 'Canadian female' },
+    { id: 'en-CA-Neural2-B', name: 'en-CA-Neural2-B', gender: 'MALE', description: 'Canadian male' },
+    { id: 'en-CA-Neural2-C', name: 'en-CA-Neural2-C', gender: 'FEMALE', description: 'Canadian warm' },
+    { id: 'en-CA-Neural2-D', name: 'en-CA-Neural2-D', gender: 'MALE', description: 'Canadian professional' },
+    { id: 'en-CA-Standard-A', name: 'en-CA-Standard-A', gender: 'FEMALE', description: 'Canadian standard female' },
+    { id: 'en-CA-Standard-B', name: 'en-CA-Standard-B', gender: 'MALE', description: 'Canadian standard male' },
+    { id: 'en-CA-Standard-C', name: 'en-CA-Standard-C', gender: 'FEMALE', description: 'Canadian clear' },
+    { id: 'en-CA-Standard-D', name: 'en-CA-Standard-D', gender: 'MALE', description: 'Canadian authoritative' },
+    { id: 'en-CA-Wavenet-A', name: 'en-CA-Wavenet-A', gender: 'FEMALE', description: 'Canadian wavenet female' },
+    { id: 'en-CA-Wavenet-B', name: 'en-CA-Wavenet-B', gender: 'MALE', description: 'Canadian wavenet male' },
+    { id: 'en-CA-Wavenet-C', name: 'en-CA-Wavenet-C', gender: 'FEMALE', description: 'Canadian wavenet friendly' },
+    { id: 'en-CA-Wavenet-D', name: 'en-CA-Wavenet-D', gender: 'MALE', description: 'Canadian wavenet deep' }
+  ];
+
+  // Load voice settings from localStorage on component mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('ava-voice-settings');
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setVoiceSettings(parsedSettings);
+        setSelectedVoice(parsedSettings.selectedVoice);
+      } catch (error) {
+        console.error('Error parsing voice settings:', error);
+      }
+    }
+  }, []);
+
+  // Save voice settings to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('ava-voice-settings', JSON.stringify(voiceSettings));
+    setSelectedVoice(voiceSettings.selectedVoice);
+  }, [voiceSettings]);
 
   // Load chat history from Supabase
   const loadChatHistory = async (feature: Feature) => {
@@ -1024,92 +1123,184 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
     }
   };
 
-  // Helper function to get voices with retry mechanism
-  const getVoicesWithRetry = (): Promise<SpeechSynthesisVoice[]> => {
-    return new Promise((resolve) => {
-      let voices = window.speechSynthesis.getVoices();
 
-      if (voices.length > 0) {
-        resolve(voices);
-        return;
-      }
-
-      // If no voices available, wait for them to load
-      const onVoicesChanged = () => {
-        voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
-          resolve(voices);
-        }
-      };
-
-      window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
-
-      // Fallback timeout in case voices never load
-      setTimeout(() => {
-        window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
-        resolve(window.speechSynthesis.getVoices());
-      }, 1000);
-    });
-  };
 
   const speakText = async (text: string) => {
     try {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-
-        // Get available voices with retry mechanism
-        const voices = await getVoicesWithRetry();
-
-        // Find the best female English voice
-        const femaleVoice = voices.find(voice =>
-          voice.lang.startsWith('en') &&
-          (voice.name.toLowerCase().includes('female') ||
-            voice.name.toLowerCase().includes('woman') ||
-            voice.name.toLowerCase().includes('samantha') ||
-            voice.name.toLowerCase().includes('karen') ||
-            voice.name.toLowerCase().includes('susan') ||
-            voice.name.toLowerCase().includes('victoria') ||
-            voice.name.toLowerCase().includes('zira') ||
-            voice.name.toLowerCase().includes('hazel') ||
-            voice.name.toLowerCase().includes('serena') ||
-            voice.name.toLowerCase().includes('allison') ||
-            voice.name.toLowerCase().includes('ava') ||
-            voice.name.toLowerCase().includes('elena') ||
-            voice.name.toLowerCase().includes('nicky') ||
-            voice.name.toLowerCase().includes('tessa'))
-        );
-
-        // Configure voice settings
-        if (femaleVoice) {
-          utterance.voice = femaleVoice;
-          console.log('Using female voice:', femaleVoice.name, femaleVoice.lang);
-        } else {
-          // Fallback: try to find any English voice that sounds female
-          const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
-          if (englishVoices.length > 0) {
-            // Often the second or third voice in the list is female
-            utterance.voice = englishVoices[Math.min(1, englishVoices.length - 1)];
-            console.log('Using fallback voice:', utterance.voice?.name);
-          }
-          console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+      // Use Google Cloud Text-to-Speech API
+      const GOOGLE_TTS_API_KEY = 'AIzaSyC_aLb8euhjbG-MWQhfZq9reI8Y9so3LV4';
+      
+      // Get selected voice configuration
+      const selectedVoiceConfig = voiceOptions.find(voice => voice.id === voiceSettings.selectedVoice);
+      const voiceName = selectedVoiceConfig?.id || 'en-US-Journey-F';
+      const voiceGender = selectedVoiceConfig?.gender || 'FEMALE';
+      const languageCode = voiceSettings.language || 'en-US';
+      
+      // Prepare the request payload for Google Cloud TTS
+      const requestBody = {
+        input: {
+          text: text
+        },
+        voice: {
+          languageCode: languageCode,
+          name: voiceName,
+          ssmlGender: voiceGender
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          speakingRate: voiceSettings.speed,
+          pitch: voiceSettings.pitch,
+          volumeGainDb: 0.0,
+          effectsProfileId: voiceSettings.audioProfile !== 'default' ? [voiceSettings.audioProfile] : undefined
         }
+      };
 
-        // Configure speech parameters for more natural female sound
-        utterance.rate = 0.85;     // Slightly slower for clarity (0.1 to 10)
-        utterance.pitch = 1.1;     // Slightly higher pitch for female voice (0 to 2)
-        utterance.volume = 0.8;    // Volume level (0 to 1)
+      console.log('Using Google Cloud TTS for:', text, 'with voice:', voiceName);
 
-        // Add event listeners for debugging
-        utterance.onstart = () => console.log('TTS started with voice:', utterance.voice?.name);
-        utterance.onend = () => console.log('TTS ended');
-        utterance.onerror = (event) => console.error('TTS error:', event);
+      // Make request to Google Cloud TTS API
+      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
 
-        window.speechSynthesis.speak(utterance);
+      if (!response.ok) {
+        throw new Error(`Google TTS API error: ${response.status} - ${response.statusText}`);
       }
+
+      const data = await response.json();
+      
+      if (!data.audioContent) {
+        throw new Error('No audio content received from Google TTS API');
+      }
+
+      // Convert base64 audio to blob and play it
+      const audioData = atob(data.audioContent);
+      const arrayBuffer = new ArrayBuffer(audioData.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      for (let i = 0; i < audioData.length; i++) {
+        uint8Array[i] = audioData.charCodeAt(i);
+      }
+
+      const audioBlob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      const audio = new Audio(audioUrl);
+      
+      audio.onloadeddata = () => console.log('Google TTS audio loaded');
+      audio.onended = () => {
+        console.log('Google TTS playback ended');
+        URL.revokeObjectURL(audioUrl); // Clean up
+      };
+      audio.onerror = (error) => console.error('Google TTS playback error:', error);
+
+      await audio.play();
+
     } catch (error) {
-      console.error("Error in speakText:", error);
+      console.error("Error in Google Cloud TTS:", error);
+      
+      // Fallback to browser speech synthesis if Google TTS fails
+      console.log("Falling back to browser speech synthesis");
+      try {
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 0.85;
+          utterance.pitch = 1.1;
+          utterance.volume = 0.8;
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch (fallbackError) {
+        console.error("Fallback TTS also failed:", fallbackError);
+      }
     }
+  };
+
+  // Function to test a specific voice with sample text and custom settings
+  const testVoice = async (voiceId: string, customSpeed?: number, customPitch?: number): Promise<boolean> => {
+    try {
+      const testText = "Hello! I'm Ava, your English coach. This is how I sound with this voice.";
+      
+      // Get voice configuration
+      const voiceConfig = voiceOptions.find(voice => voice.id === voiceId);
+      const voiceName = voiceConfig?.id || voiceId;
+      const voiceGender = voiceConfig?.gender || 'FEMALE';
+      
+      // Prepare the request payload for Google Cloud TTS
+      const requestBody = {
+        input: {
+          text: testText
+        },
+        voice: {
+          languageCode: 'en-US',
+          name: voiceName,
+          ssmlGender: voiceGender
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          speakingRate: customSpeed !== undefined ? customSpeed : voiceSettings.speed,
+          pitch: customPitch !== undefined ? customPitch : voiceSettings.pitch,
+          volumeGainDb: 0.0,
+          effectsProfileId: voiceSettings.audioProfile !== 'default' ? [voiceSettings.audioProfile] : undefined
+        }
+      };
+
+      console.log('Testing voice:', voiceName);
+
+      // Make request to Google Cloud TTS API
+      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Google TTS API error: ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.audioContent) {
+        throw new Error('No audio content received from Google TTS API');
+      }
+
+      // Convert base64 audio to blob and play it
+      const audioData = atob(data.audioContent);
+      const arrayBuffer = new ArrayBuffer(audioData.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      for (let i = 0; i < audioData.length; i++) {
+        uint8Array[i] = audioData.charCodeAt(i);
+      }
+
+      const audioBlob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      const audio = new Audio(audioUrl);
+      
+      audio.onloadeddata = () => console.log('Voice test audio loaded for:', voiceName);
+      audio.onended = () => {
+        console.log('Voice test playback ended for:', voiceName);
+        URL.revokeObjectURL(audioUrl); // Clean up
+      };
+      audio.onerror = (error) => console.error('Voice test playback error:', error);
+
+      await audio.play();
+      return true;
+
+    } catch (error) {
+      console.error("Error testing voice:", error);
+      return false;
+    }
+  };
+
+  // Handle voice settings changes
+  const handleVoiceSettingsChange = (newSettings: typeof voiceSettings) => {
+    setVoiceSettings(newSettings);
   };
 
   const renderMarkdown = (text: string) => {
@@ -1275,7 +1466,14 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
 
   return (
     <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
-      <ChatHeader onClose={onClose} />
+      <ChatHeader 
+        onClose={onClose} 
+        selectedVoice={selectedVoice}
+        voiceOptions={voiceOptions}
+        onVoiceChange={setSelectedVoice}
+        onTestVoice={testVoice}
+        onOpenVoiceSettings={() => setShowVoiceSettings(true)}
+      />
       <FeatureButtons features={features} currentFeature={currentFeature} onFeatureClick={handleFeatureClick} />
 
       {/* Grammar lesson indicator */}
@@ -1444,6 +1642,16 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
           </div>
         </div>
       )}
+
+      {/* Voice Settings Modal */}
+      <VoiceSettingsModal
+        isOpen={showVoiceSettings}
+        onClose={() => setShowVoiceSettings(false)}
+        voiceOptions={voiceOptions}
+        currentSettings={voiceSettings}
+        onSettingsChange={handleVoiceSettingsChange}
+        onTestVoice={testVoice}
+      />
     </div>
   );
 };
