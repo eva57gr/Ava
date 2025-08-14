@@ -1465,8 +1465,8 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
   };
 
   return (
-    // <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
-    <div>
+    <div className="fixed w-full w-[100%] h-[100%] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
+
       <ChatHeader 
         onClose={onClose} 
         selectedVoice={selectedVoice}
