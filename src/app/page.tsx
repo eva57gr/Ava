@@ -1465,7 +1465,8 @@ Respond as Ava, continuing this educational conversation naturally while incorpo
   };
 
   return (
-    <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
+    // <div className="fixed bottom-4 right-12 w-full max-w-md h-[70vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden z-50">
+    <div>
       <ChatHeader 
         onClose={onClose} 
         selectedVoice={selectedVoice}
@@ -1679,30 +1680,31 @@ export default function Page() {
 
   // Show main page content if user is signed in
   return (
-    <div className="relative w-full h-screen overflow-hidden">
-      <iframe
+    <div>
+     {/* <div className="relative w-full h-screen overflow-hidden"> */}
+      {/* <iframe
         src="https://www.thinkific.com/"
         title="Thinkific Content"
         className="w-full h-full border-none"
         allowFullScreen
-      ></iframe>
+      ></iframe> */}
 
       {/* User Profile - Top Right */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* <div className="fixed top-4 right-4 z-50">
         <UserProfile />
-      </div>
+      </div> */}
 
       {/* Chat Toggle Button */}
-      <button
+      {/* <button
         onClick={() => setIsChatOpen(!isChatOpen)}
         className="fixed bottom-6 right-14 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition duration-300 ease-in-out transform hover:scale-110 z-50"
         title="Toggle AI English Coach"
       >
         {isChatOpen ? <LargeCloseIcon /> : <ChatIcon />}
-      </button>
+      </button> */}
 
       {/* Chat Widget */}
-      <AIChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <AIChatWidget isOpen={true} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 };
