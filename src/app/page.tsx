@@ -1695,13 +1695,13 @@ export default function Page() {
       </div> */}
 
       {/* Chat Toggle Button */}
-      {/* <button
+      <button
         onClick={() => setIsChatOpen(!isChatOpen)}
         className="fixed bottom-6 right-14 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition duration-300 ease-in-out transform hover:scale-110 z-50"
         title="Toggle AI English Coach"
       >
         {isChatOpen ? <LargeCloseIcon /> : <ChatIcon />}
-      </button> */}
+      </button>
 
       {/* Chat Widget */}
       <AIChatWidget isOpen={true} onClose={() => setIsChatOpen(false)} />
