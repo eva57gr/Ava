@@ -91,7 +91,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           isListening
             ? 'bg-red-500 text-white'
             : input.trim() !== ''
-              ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+              ? 'bg-blue-500 text-white hover:bg-blue-700 hover:scale-105'
               : 'bg-blue-500 text-white hover:bg-blue-700 hover:scale-105'
         } ${isSending ? 'opacity-60 cursor-not-allowed' : ''}`}
         disabled={isSending}
@@ -102,5 +102,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     </div>
   );
 };
+
+
 
 export default ChatInput; 
