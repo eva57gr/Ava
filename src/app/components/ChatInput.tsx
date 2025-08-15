@@ -92,7 +92,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             ? 'bg-red-500 text-white'
             : input.trim() !== ''
               ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:scale-105'
+              : 'bg-blue-500 text-white hover:bg-blue-700 hover:scale-105'
         } ${isSending ? 'opacity-60 cursor-not-allowed' : ''}`}
         disabled={isSending}
         title={primaryActionTitle}
