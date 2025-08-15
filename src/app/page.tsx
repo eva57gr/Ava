@@ -1674,9 +1674,9 @@ export default function Page() {
   }
 
   // Show authentication page if user is not signed in
-  // if (!user) {
-  //   return <AuthPage />;
-  // }
+  if (!user) {
+    return <AuthPage />;
+  }
 
   // Show main page content if user is signed in
   return (
